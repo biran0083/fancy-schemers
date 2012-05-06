@@ -9,6 +9,16 @@
 #define ISA(v,type) (bool)(dynamic_cast<type>(v))
 using namespace std;
 
+Expression* Expression::eval(Environment*){
+  return this;
+}
+Environment::Environment():parent(0){}
+BoolValue::BoolValue(bool v):v(v){}
+IntValue::IntValue(int v):v(v){}
+Label::Label(string s):s(s){}
+Lambda::Lambda():e(0){}
+Lambda::Lambda(Environment* e):e(e){}
+Pair::Pair(Expression*a,Expression*b):a(a),b(b){}
 string Null::toString(){
   return "Null";
 }
