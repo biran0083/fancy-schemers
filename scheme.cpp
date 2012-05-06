@@ -2,215 +2,160 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <map>
 #include <stack>
-#include <list>
-#include <vector>
 #include <iostream>
 #include <sstream>
+#include"types.h"
 #define ISA(v,type) (bool)(dynamic_cast<type>(v))
 using namespace std;
 
-struct Environment;
-struct Expression {
-  virtual Expression* eval(Environment*)=0;
-  virtual string toString()=0;
-};
-struct Null:Expression{
-  virtual string toString(){
-    return "Null";
+string Null::toString(){
+  return "Null";
+}
+bool Environment::has(string s){
+  bool res = m.find(s)!=m.end() || (parent && parent->has(s));
+  return res;
+}
+void Environment::put(string s,Expression* e){
+  m[s]=e;
+}
+Expression* Environment::get(string s){
+  return m.find(s)==m.end() ? parent->get(s) : m[s];
+}
+void Environment::show(){
+  for(map<string,Expression*>::iterator it=m.begin();
+      it!=m.end();it++)
+    cout<<it->first<<" "<<it->second->toString()<<endl;
+  if(parent)parent->show();
+}
+Expression* ExpSequence::eval(Environment* e){
+  assert(es.size()>0);
+  Expression* res = 0;
+  for(int i=0;i<es.size();i++)
+    res = es[i]->eval(e);
+  return res;
+}
+string ExpSequence::toString(){
+  string res="";
+  for(int i=0;i<es.size();i++)
+    res+=es[i]->toString();
+  return res;
+}
+string BoolValue::toString(){
+  return v?"#t":"#f";
+}
+string IntValue::toString(){
+  stringstream str;
+  str<<v;
+  return str.str();
+}
+Expression* Label::eval(Environment* e){
+  return e->has(s) ? e->get(s) : this;
+}
+string Label::toString(){
+  return s;
+}
+Expression* Lambda::eval(Environment* e){
+  Lambda* res= new Lambda(*this); 
+  res->e=e;
+  return res;
+}
+string Lambda::toString(){
+  string s="(lambda (";
+  for(int i=0;i<args.size();i++){
+    if(i)s+=" ";
+    s+=args[i];
   }
-  virtual Expression* eval(Environment* e){return this;}
-};
-struct Environment{
-  Environment* parent;
-  map<string,Expression*> m;
-  Environment():parent(0){}
-  bool has(string s){
-    bool res = m.find(s)!=m.end() || (parent && parent->has(s));
-    return res;
+  s+=") "+body->toString()+")";
+  return s;
+}
+string Pair::toString(){
+  string res = "("+a->toString();
+  Expression* t=b;
+  while(ISA(t,Pair*)){
+    Pair* p=(Pair*) t;
+    res += " " + p->a->toString();
+    t = p->b;
   }
-  void put(string s,Expression* e){
-    m[s]=e;
+  if(ISA(t,Null*)){
+    res+=")";
+  }else{
+    res+=" . "+t->toString()+")";
   }
-  Expression* get(string s){
-    return m.find(s)==m.end() ? parent->get(s) : m[s];
-  }
-  void show(){
-    for(map<string,Expression*>::iterator it=m.begin();
-        it!=m.end();it++)
-      cout<<it->first<<" "<<it->second->toString()<<endl;
-    if(parent)parent->show();
-  }
-};
-struct ExpSequence: public Expression{
-  vector<Expression*> es;
-  virtual Expression* eval(Environment* e){
-    assert(es.size()>0);
-    Expression* res = 0;
-    for(int i=0;i<es.size();i++)
-      res = es[i]->eval(e);
-    return res;
-  }
-  virtual string toString(){
-    string res="";
-    for(int i=0;i<es.size();i++)
-      res+=es[i]->toString();
-    return res;
-  }
-};
-struct BoolValue: public Expression{
-  bool v;
-  BoolValue(bool v):v(v){}
-  virtual Expression* eval(Environment* e){return this;}
-  virtual string toString(){
-    return v?"#t":"#f";
-  }
-};
-struct IntValue:public Expression{
-  int v;
-  IntValue(int v):v(v){}
-  virtual Expression* eval(Environment* e){return this;}
-  virtual string toString(){
-    stringstream str;
-    str<<v;
-    return str.str();
-  }
-};
-struct Label:public Expression{
-  string s;
-  Label(string s):s(s){}
-  virtual Expression* eval(Environment* e){
-    return e->has(s) ? e->get(s) : this;
-  }
-  virtual string toString(){
-    return s;
-  }
-};
-struct Lambda:public Expression{
-  vector<string> args;
-  Expression* body;
-  Environment* e;
-  Lambda():e(0){}
-  Lambda(Environment* e):e(e){}
-  virtual Expression* eval(Environment* e){
-    Lambda* res= new Lambda(*this); 
-    res->e=e;
-    return res;
-  }
-  virtual string toString(){
-    string s="(lambda (";
-    for(int i=0;i<args.size();i++){
-      if(i)s+=" ";
-      s+=args[i];
+  return res;
+}
+string Application::toString(){
+  string s="("+op->toString();
+  for(int i=0;i<args.size();i++)
+    s+=" "+args[i]->toString();
+  s+=")";
+  return s;
+}
+Expression* Application::eval(Environment* e){
+  Expression* opVal = op->eval(e);
+  vector<Expression*> vals(args.size());
+  for(int i=0;i<args.size();i++)
+    vals[i]=args[i]->eval(e);
+  Lambda* f=0;
+  if(ISA(opVal,Label*)){
+    string s = ((Label*)opVal)->s;
+    if(e->has(s)) f = (Lambda*)(e->get(s));
+    else if(s=="cons") return new Pair(vals[0],vals[1]);
+    else if(s=="car") return ((Pair*)vals[0])->a;
+    else if(s=="cdr") return ((Pair*)vals[0])->b;
+    else if(s=="list"){
+      int i=vals.size()-1;
+      if(i<0)return new Null();
+      Pair* res=new Pair(vals[i--],new Null());
+      while(i>=0)
+        res=new Pair(vals[i--],res);
+      return res;
+    } else if(s=="+")return new IntValue(((IntValue*)vals[0])->v + ((IntValue*)vals[1])->v);
+    else if(s=="-")return new IntValue(((IntValue*)vals[0])->v - ((IntValue*)vals[1])->v);
+    else if(s=="*")return new IntValue(((IntValue*)vals[0])->v * ((IntValue*)vals[1])->v);
+    else if(s=="/")return new IntValue(((IntValue*)vals[0])->v / ((IntValue*)vals[1])->v);
+    else if(s=="mod")return new IntValue(((IntValue*)vals[0])->v % ((IntValue*)vals[1])->v);
+    else if(s==">")return new BoolValue(((IntValue*)vals[0])->v > ((IntValue*)vals[1])->v);
+    else if(s=="<")return new BoolValue(((IntValue*)vals[0])->v < ((IntValue*)vals[1])->v);
+    else if(s=="and")return new BoolValue(((BoolValue*)vals[0])->v && ((BoolValue*)vals[1])->v);
+    else if(s=="or")return new BoolValue(((BoolValue*)vals[0])->v || ((BoolValue*)vals[1])->v);
+    else if(s=="not")return new BoolValue(!((BoolValue*)vals[0])->v);
+    else if(s=="null?")return new BoolValue(ISA(vals[0],Null*));
+    else if(s=="eq?" || s=="="){
+      if(ISA(vals[0],BoolValue*) && ISA(vals[1],BoolValue*))
+        return new BoolValue(((BoolValue*)vals[0])->v == ((BoolValue*)vals[1])->v);
+      else if(ISA(vals[0],IntValue*) && ISA(vals[1],IntValue*))
+        return new BoolValue(((IntValue*)vals[0])->v == ((IntValue*)vals[1])->v);
+      else if(ISA(vals[0],Null*) && ISA(vals[1],Null*))
+        return new BoolValue(true);
+      else return new BoolValue(false);
     }
-    s+=") "+body->toString()+")";
-    return s;
-  }
-};
-struct Pair:public Expression{
-  Expression *a,*b;
-  Pair(Expression*a,Expression*b):a(a),b(b){}
-  virtual Expression* eval(Environment* e){return this;}
-  virtual string toString(){
-    string res = "("+a->toString();
-    Expression* t=b;
-    while(ISA(t,Pair*)){
-      Pair* p=(Pair*) t;
-      res += " " + p->a->toString();
-      t = p->b;
+    else{
+      cout<<"unknown label: "<<s<<endl;
+      assert(false);
     }
-    if(ISA(t,Null*)){
-      res+=")";
-    }else{
-      res+=" . "+t->toString()+")";
-    }
-    return res;
-  }
-};
-struct Application:Expression{
-  Expression* op;
-  vector<Expression*> args;
-  virtual string toString(){
-    string s="("+op->toString();
-    for(int i=0;i<args.size();i++)
-      s+=" "+args[i]->toString();
-    s+=")";
-    return s;
-  }
-  virtual Expression* eval(Environment* e){
-    Expression* opVal = op->eval(e);
-    vector<Expression*> vals(args.size());
-    for(int i=0;i<args.size();i++)
-      vals[i]=args[i]->eval(e);
-    Lambda* f=0;
-    if(ISA(opVal,Label*)){
-      string s = ((Label*)opVal)->s;
-      if(e->has(s)) f = (Lambda*)(e->get(s));
-      else if(s=="cons") return new Pair(vals[0],vals[1]);
-      else if(s=="car") return ((Pair*)vals[0])->a;
-      else if(s=="cdr") return ((Pair*)vals[0])->b;
-      else if(s=="list"){
-        int i=vals.size()-1;
-        if(i<0)return new Null();
-        Pair* res=new Pair(vals[i--],new Null());
-        while(i>=0)
-          res=new Pair(vals[i--],res);
-        return res;
-      } else if(s=="+")return new IntValue(((IntValue*)vals[0])->v + ((IntValue*)vals[1])->v);
-      else if(s=="-")return new IntValue(((IntValue*)vals[0])->v - ((IntValue*)vals[1])->v);
-      else if(s=="*")return new IntValue(((IntValue*)vals[0])->v * ((IntValue*)vals[1])->v);
-      else if(s=="/")return new IntValue(((IntValue*)vals[0])->v / ((IntValue*)vals[1])->v);
-      else if(s=="mod")return new IntValue(((IntValue*)vals[0])->v % ((IntValue*)vals[1])->v);
-      else if(s==">")return new BoolValue(((IntValue*)vals[0])->v > ((IntValue*)vals[1])->v);
-      else if(s=="<")return new BoolValue(((IntValue*)vals[0])->v < ((IntValue*)vals[1])->v);
-      else if(s=="and")return new BoolValue(((BoolValue*)vals[0])->v && ((BoolValue*)vals[1])->v);
-      else if(s=="or")return new BoolValue(((BoolValue*)vals[0])->v || ((BoolValue*)vals[1])->v);
-      else if(s=="not")return new BoolValue(!((BoolValue*)vals[0])->v);
-      else if(s=="null?")return new BoolValue(ISA(vals[0],Null*));
-      else if(s=="eq?" || s=="="){
-        if(ISA(vals[0],BoolValue*) && ISA(vals[1],BoolValue*))
-          return new BoolValue(((BoolValue*)vals[0])->v == ((BoolValue*)vals[1])->v);
-        else if(ISA(vals[0],IntValue*) && ISA(vals[1],IntValue*))
-          return new BoolValue(((IntValue*)vals[0])->v == ((IntValue*)vals[1])->v);
-        else if(ISA(vals[0],Null*) && ISA(vals[1],Null*))
-          return new BoolValue(true);
-        else return new BoolValue(false);
-      }
-      else{
-        cout<<"unknown label: "<<s<<endl;
-        assert(false);
-      }
-    }else if(ISA(opVal,Lambda*)) f = (Lambda*)opVal;
-    Environment* e2 = new Environment();
-    e2->parent = f->e;
-    for(int i=0;i < f->args.size();i++)
-      e2->m[f->args[i]] = vals[i];
-    return f->body->eval(e2);
-  }
-};
-struct If:Expression{
-  Expression *condition, *thenPart, *elsePart;
-  virtual string toString(){
-    return "(if "+condition->toString()+" "+thenPart->toString()+" "+elsePart->toString()+")";
-  }
-  virtual Expression* eval(Environment* e){
-    BoolValue* t = (BoolValue*)(condition->eval(e));
-    if(t->v)return thenPart->eval(e);
-    else return elsePart->eval(e);
-  }
-};
-struct Define:Expression{
-  Label *label;
-  Expression* exp;
-  virtual string toString(){
-    return "(define "+label->s+" "+exp->toString()+")"; 
-  }
-  virtual Expression* eval(Environment* e){
-    e->put(label->s,exp->eval(e));
-    return new Null();
-  }
-};
+  }else if(ISA(opVal,Lambda*)) f = (Lambda*)opVal;
+  Environment* e2 = new Environment();
+  e2->parent = f->e;
+  for(int i=0;i < f->args.size();i++)
+    e2->m[f->args[i]] = vals[i];
+  return f->body->eval(e2);
+}
+string If::toString(){
+  return "(if "+condition->toString()+" "+thenPart->toString()+" "+elsePart->toString()+")";
+}
+Expression* If::eval(Environment* e){
+  BoolValue* t = (BoolValue*)(condition->eval(e));
+  if(t->v)return thenPart->eval(e);
+  else return elsePart->eval(e);
+}
+string Define::toString(){
+  return "(define "+label->s+" "+exp->toString()+")"; 
+}
+Expression* Define::eval(Environment* e){
+  e->put(label->s,exp->eval(e));
+  return new Null();
+}
 void trim(string& s){
   int i=0;
   while(i<s.size() && s[i]==' ')
@@ -352,7 +297,8 @@ int main(int argc, const char *argv[])
   while(getline(cin,code)){
     Expression * e=parse(code);
     cout<<"exp: "<<e->toString()<<endl;
-    cout<<"res: "<<e->eval(env)->toString()<<endl;
+    string res=e->eval(env)->toString();
+    cout<<"res "<<res<<endl;
   }
   return 0;
 }

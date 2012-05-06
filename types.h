@@ -1,3 +1,6 @@
+#ifndef __TYPE_H__
+#define __TYPE_H__
+
 #include<map>
 #include<list>
 #include<vector>
@@ -74,3 +77,5 @@ struct Define:Expression{
   virtual string toString();
   virtual Expression* eval(Environment* e);
 };
+
+#endif
