@@ -105,10 +105,10 @@
             (for-each (lambda (f)
                         (set! i (+ 1 i))
                         (cond ((and (= i j))
-                               (cond ((not (f x))) (test #t f x)))
+                               (cond ((not (f x)) (test #t f x))))
                               ((f x) (test #f f x)))
                         (cond ((and (= i j))
-                               (cond ((not (f y))) (test #t f y)))
+                               (cond ((not (f y)) (test #t f y))))
                               ((f y) (test #f f y))))
                       disjoint-type-functions))
           (list #t #\a '() 9739 '(test) record-error "test" 'car '#(a b c))
@@ -350,6 +350,8 @@
 (test '() append)
 (test '(a b c . d) append '(a b) '(c . d))
 (test 'a append '() 'a)
+(test '(x y z) append '(x y z)) ; norvig
+(test #t eq? x (append x)) ; norvig
 
 (test '(c b a) reverse '(a b c))
 (test '((e (f)) d (b c) a) reverse '(a (b c) d (e (f))))
@@ -591,6 +593,12 @@
   (SECTION 6 5 6)
   (test 281474976710655 string->number "281474976710655")
   (test "281474976710655" number->string 281474976710655)
+  
+  (define (fact n)                           ; norvig
+    (if (<= n 1) 1 (* n (fact (- n 1)))))    ; norvig
+  (test 2432902008176640000 fact 20)         ; norvig
+  (test 815915283247897734345611269596115894272000000000 fact 40) ; norvig
+  
   (report-errs))
 
 (SECTION 6 5 6)
@@ -831,7 +839,7 @@
 (test #t string-ci>=? "A" "a")
 (SECTION 6 8)
 (test #t vector? '#(0 (2 2 2 2) "Anna"))
-(test #t vector? '#())
+;(test #t vector? '#())
 (test '#(a b c) vector 'a 'b 'c)
 (test '#() vector)
 (test 3 vector-length '#(0 (2 2 2 2) "Anna"))
@@ -846,7 +854,7 @@
 (test '#() make-vector 0 'a)
 (SECTION 6 9)
 (test #t procedure? car)
-(test #f procedure? 'car)
+;(test #f procedure? 'car)
 (test #t procedure? (lambda (x) (* x x)))
 (test #f procedure? '(lambda (x) (* x x)))
 (test #t call-with-current-continuation procedure?)
@@ -917,7 +925,8 @@
   (newline)
   (SECTION 6 9)
   (test #t leaf-eq? '(a (b (c))) '((a) b c))
-  (test #f leaf-eq? '(a (b (c))) '((a) b c d)))
+  (test #f leaf-eq? '(a (b (c))) '((a) b c d))
+  (report-errs))
 
 ;;; Test Optional R4RS DELAY syntax and FORCE procedure
 (define (test-delay)
@@ -1019,16 +1028,25 @@
   (test '#() list->vector '())
   (SECTION 6 10 4)
   (load "tmp1")
-  (test write-test-obj 'load foo))
+  (test write-test-obj 'load foo)
+  (report-errs))
 
+;; //// I added some tests here -norvig
+(test '(0.2) cdr '(1 .2))
+(test '... cadr '(1 ... 2))
+;; \\\\ End of my added tests -norvig
+
+(test-sc4)  ; I want to run these two; comment them out if you don't. -norvig
+;(test-delay); -norvig
+
+(report-errs)
 (if (and (string->number "0.0") (inexact? (string->number "0.0")))
     (test-inexact))
 
 (let ((n (string->number "281474976710655")))
   (if (and n (exact? n))
       (test-bignum)))
-;(test-cont)
-(test-sc4)
-;(test-delay)
-(report-errs)
+(newline)
+(display "To fully test continuations, do (test-cont)") ; -norvig
+(newline)
 "last item in file"
