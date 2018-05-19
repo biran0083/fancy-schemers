@@ -1,0 +1,7 @@
+(define (perm l)
+          (if (null? l)
+              '(())
+              (flat (map (lambda (x)
+                           (map (lambda (y) (cons x y)) (perm (filter (lambda (y) (not (= y x))) l))))
+                         l))))
+(display (perm '(1 2 3)))
