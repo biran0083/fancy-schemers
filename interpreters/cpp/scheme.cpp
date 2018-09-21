@@ -8,36 +8,32 @@
 #include <vector>
 #include <iostream>
 #include <sstream>
+#include "scheme.h"
 #define ISA(v, type) (bool)(dynamic_cast<type>(v))
 using namespace std;
 
-struct Environment;
-struct Expression {
-  virtual Expression* eval(Environment*) = 0;
-  virtual string toString() = 0;
-};
-struct Null : Expression {
-  virtual string toString() { return "Null"; }
+bool Environment::has(string s) {
+  bool res = m.find(s) != m.end() || (parent && parent->has(s));
+  return res;
+}
+
+void Environment::put(string s, Expression* e) { m[s] = e; }
+
+Expression* Environment::get(string s) {
+  return m.find(s) == m.end() ? parent->get(s) : m[s];
+}
+
+void Environment::show() {
+  for (map<string, Expression*>::iterator it = m.begin(); it != m.end(); it++)
+    cout << it->first << " " << it->second->toString() << endl;
+  if (parent) parent->show();
+}
+
+struct EmptyList : Expression {
+  virtual string toString() { return "()"; }
   virtual Expression* eval(Environment* e) { return this; }
 };
-struct Environment {
-  Environment* parent;
-  map<string, Expression*> m;
-  Environment() : parent(0) {}
-  bool has(string s) {
-    bool res = m.find(s) != m.end() || (parent && parent->has(s));
-    return res;
-  }
-  void put(string s, Expression* e) { m[s] = e; }
-  Expression* get(string s) {
-    return m.find(s) == m.end() ? parent->get(s) : m[s];
-  }
-  void show() {
-    for (map<string, Expression*>::iterator it = m.begin(); it != m.end(); it++)
-      cout << it->first << " " << it->second->toString() << endl;
-    if (parent) parent->show();
-  }
-};
+
 struct ExpSequence : public Expression {
   vector<Expression*> es;
   virtual Expression* eval(Environment* e) {
@@ -52,12 +48,14 @@ struct ExpSequence : public Expression {
     return res;
   }
 };
+
 struct BoolValue : public Expression {
   bool v;
   BoolValue(bool v) : v(v) {}
   virtual Expression* eval(Environment* e) { return this; }
   virtual string toString() { return v ? "#t" : "#f"; }
 };
+
 struct IntValue : public Expression {
   int v;
   IntValue(int v) : v(v) {}
@@ -68,14 +66,16 @@ struct IntValue : public Expression {
     return str.str();
   }
 };
-struct Label : public Expression {
+
+struct Symbol : public Expression {
   string s;
-  Label(string s) : s(s) {}
+  Symbol(string s) : s(s) {}
   virtual Expression* eval(Environment* e) {
     return e->has(s) ? e->get(s) : this;
   }
   virtual string toString() { return s; }
 };
+
 struct Lambda : public Expression {
   vector<string> args;
   Expression* body;
@@ -97,6 +97,7 @@ struct Lambda : public Expression {
     return s;
   }
 };
+
 struct Pair : public Expression {
   Expression* a, *b;
   Pair(Expression* a, Expression* b) : a(a), b(b) {}
@@ -109,7 +110,7 @@ struct Pair : public Expression {
       res += " " + p->a->toString();
       t = p->b;
     }
-    if (ISA(t, Null*)) {
+    if (ISA(t, EmptyList*)) {
       res += ")";
     } else {
       res += " . " + t->toString() + ")";
@@ -117,6 +118,7 @@ struct Pair : public Expression {
     return res;
   }
 };
+
 struct Application : Expression {
   Expression* op;
   vector<Expression*> args;
@@ -131,8 +133,8 @@ struct Application : Expression {
     vector<Expression*> vals(args.size());
     for (int i = 0; i < args.size(); i++) vals[i] = args[i]->eval(e);
     Lambda* f = 0;
-    if (ISA(opVal, Label*)) {
-      string s = ((Label*)opVal)->s;
+    if (ISA(opVal, Symbol*)) {
+      string s = ((Symbol*)opVal)->s;
       if (e->has(s))
         f = (Lambda*)(e->get(s));
       else if (s == "cons")
@@ -143,8 +145,8 @@ struct Application : Expression {
         return ((Pair*)vals[0])->b;
       else if (s == "list") {
         int i = vals.size() - 1;
-        if (i < 0) return new Null();
-        Pair* res = new Pair(vals[i--], new Null());
+        if (i < 0) return new EmptyList();
+        Pair* res = new Pair(vals[i--], new EmptyList());
         while (i >= 0) res = new Pair(vals[i--], res);
         return res;
       } else if (s == "+")
@@ -170,7 +172,7 @@ struct Application : Expression {
       else if (s == "not")
         return new BoolValue(!((BoolValue*)vals[0])->v);
       else if (s == "null?")
-        return new BoolValue(ISA(vals[0], Null*));
+        return new BoolValue(ISA(vals[0], EmptyList*));
       else if (s == "eq?" || s == "=") {
         if (ISA(vals[0], BoolValue*)&&ISA(vals[1], BoolValue*))
           return new BoolValue(((BoolValue*)vals[0])->v ==
@@ -178,7 +180,7 @@ struct Application : Expression {
         else if (ISA(vals[0], IntValue*)&&ISA(vals[1], IntValue*))
           return new BoolValue(((IntValue*)vals[0])->v ==
                                ((IntValue*)vals[1])->v);
-        else if (ISA(vals[0], Null*)&&ISA(vals[1], Null*))
+        else if (ISA(vals[0], EmptyList*)&&ISA(vals[1], EmptyList*))
           return new BoolValue(true);
         else
           return new BoolValue(false);
@@ -194,6 +196,7 @@ struct Application : Expression {
     return f->body->eval(e2);
   }
 };
+
 struct If : Expression {
   Expression* condition, *thenPart, *elsePart;
   virtual string toString() {
@@ -208,22 +211,25 @@ struct If : Expression {
       return elsePart->eval(e);
   }
 };
+
 struct Define : Expression {
-  Label* label;
+  Symbol* label;
   Expression* exp;
   virtual string toString() {
     return "(define " + label->s + " " + exp->toString() + ")";
   }
   virtual Expression* eval(Environment* e) {
     e->put(label->s, exp->eval(e));
-    return new Null();
+    return new EmptyList();
   }
 };
+
 void trim(string& s) {
   int i = 0;
   while (i < s.size() && s[i] == ' ') i++;
   s = s.substr(i);
 }
+
 string parseToken(string& s) {
   trim(s);
   if (s == "") return "";
@@ -237,6 +243,7 @@ string parseToken(string& s) {
   s = s.substr(i);
   return res;
 }
+
 bool isInteger(string s) {
   int i = 0;
   if (s[0] == '-') i++;
@@ -245,12 +252,13 @@ bool isInteger(string s) {
     if (s[i] < '0' || s[i] > '9') return false;
   return true;
 }
+
 Expression* parse(list<string>& tokens) {
   if (tokens.front() == "(") {
     tokens.pop_front();
     if (tokens.front() == ")") {
       tokens.pop_front();
-      return new Null();
+      return new EmptyList();
     }
     if (tokens.front() == "lambda") {
       tokens.pop_front();
@@ -282,7 +290,7 @@ Expression* parse(list<string>& tokens) {
       Define* res = new Define();
       if (tokens.front() == "(") {
         tokens.pop_front();
-        res->label = (Label*)(parse(tokens));
+        res->label = (Symbol*)(parse(tokens));
         Lambda* f = new Lambda();
         while (tokens.front() != ")") {
           f->args.push_back(tokens.front());
@@ -297,7 +305,7 @@ Expression* parse(list<string>& tokens) {
         f->body = exps;
         res->exp = f;
       } else {
-        res->label = (Label*)(parse(tokens));
+        res->label = (Symbol*)(parse(tokens));
         res->exp = parse(tokens);
         tokens.pop_front();
       }
@@ -312,7 +320,7 @@ Expression* parse(list<string>& tokens) {
       while (tokens.front() != ")") {
         assert(tokens.front() == "(");
         tokens.pop_front();
-        f->args.push_back(((Label*)parse(tokens))->s);
+        f->args.push_back(((Symbol*)parse(tokens))->s);
         res->args.push_back(parse(tokens));
         tokens.pop_front();
       }
@@ -337,9 +345,10 @@ Expression* parse(list<string>& tokens) {
     } else if (isInteger(s)) {
       return new IntValue(atoi(s.c_str()));
     }
-    return new Label(s);
+    return new Symbol(s);
   }
 }
+
 Expression* parse(string s) {
   list<string> tokens;
   while (1) {
@@ -350,14 +359,4 @@ Expression* parse(string s) {
   ExpSequence* res = new ExpSequence();
   while (tokens.size() > 0) res->es.push_back(parse(tokens));
   return res;
-}
-int main(int argc, const char* argv[]) {
-  string code;
-  Environment* env = new Environment();
-  while (getline(cin, code)) {
-    Expression* e = parse(code);
-    cout << "exp: " << e->toString() << endl;
-    cout << "res: " << e->eval(env)->toString() << endl;
-  }
-  return 0;
 }
