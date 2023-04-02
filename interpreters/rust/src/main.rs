@@ -8,16 +8,28 @@ mod lex;
 use env::Env;
 use eval::{Interpreter, EvalError};
 use linefeed::{Interface, ReadResult};
-
+use std::fs;
 
 fn main() {
-    let reader = Interface::new("fancy-schemers").unwrap();
-    reader.set_prompt("scheme> ").unwrap();
+    let args: Vec<String> = std::env::args().collect();
     let env = Rc::new(RefCell::new(Env::new()));
-    while let ReadResult::Input(input) = reader.read_line().unwrap() {
-        match input.eval(env.clone()) {
-            Ok(value) => println!("{}", value.to_string()),
-            Err(EvalError{msg}) => println!("Err: {}", msg),
+    if args.len() == 2 {
+        match fs::read_to_string(&args[1]) {
+            Ok(script) => {
+                script.eval(env.clone());
+            },
+            Err(e) => {
+                println!("{:?}", e);
+            }
+        }
+    } else {
+        let reader = Interface::new("fancy-schemers").unwrap();
+        reader.set_prompt("scheme> ").unwrap();
+        while let ReadResult::Input(input) = reader.read_line().unwrap() {
+            match input.eval(env.clone()) {
+                Ok(value) => println!("{}", value.to_string()),
+                Err(EvalError{msg}) => println!("Err: {}", msg),
+            }
         }
     }
 }

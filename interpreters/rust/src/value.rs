@@ -30,6 +30,7 @@ pub enum BuiltInFunType {
     Car,
     Cdr,
     IsNull,
+    Display
 }
 
 impl FromStr for BuiltInFunType {
@@ -46,6 +47,7 @@ impl FromStr for BuiltInFunType {
             "car" => Ok(BuiltInFunType::Car),
             "cdr" => Ok(BuiltInFunType::Cdr),
             "null?" => Ok(BuiltInFunType::IsNull),
+            "display" => Ok(BuiltInFunType::Display),
             _ => Err(()),
         }
     }
@@ -116,6 +118,11 @@ pub fn apply_built_in_function(f : BuiltInFunType, params : Vec<Rc<Value>>) -> R
             } else {
                 Ok(Rc::new(Value::Bool(false)))
             }
+        },
+        BuiltInFunType::Display => {
+            assert_eq!(params.len(), 1);
+            print!("{}", params[0].to_string());
+            Ok(Rc::new(Value::Void))
         }
     }
 }
@@ -139,7 +146,7 @@ fn list_to_string_inner(value : &Value) -> String {
 // list without prefix '
 fn to_string_helper(value : &Value) -> String {
     match value {
-        Value::Void => "#void".into(),
+        Value::Void => "".into(),
         Value::Int(v) => v.to_string(),
         Value::BuiltInFun(f) => format!("{:?}",f),
         Value::Closure{env:_, body:_, params:_} => "#procedure".into(),
