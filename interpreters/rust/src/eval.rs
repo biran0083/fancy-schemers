@@ -94,6 +94,19 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                                 env.as_ref().borrow_mut().set(name.into(), value);
                                return Ok(Rc::new(Value::Void));
                             },
+                            Value::Pair(fst, rst) => {
+                                match fst.as_ref() {
+                                    Value::Symbol(name) => {
+                                        let value = Rc::new(Value::Closure{
+                                            env: env.clone(), params: rst.clone(), body: lst[2].clone()});
+                                        env.as_ref().borrow_mut().set(name.into(), value);
+                                        return Ok(Rc::new(Value::Void));
+                                    },
+                                    _ => {
+                                        return Err(EvalError{msg:"illegal define syntax".into()});
+                                    }
+                                }
+                            },
                             _ => {
                                 return Err(EvalError{msg:"evaluate define failed".into()});
                             }

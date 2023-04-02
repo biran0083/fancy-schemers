@@ -216,4 +216,19 @@ mod tests {
         "###.eval(env.clone()).unwrap().to_string();
         assert_eq!(v, "2".to_string());
     }
+
+    #[test]
+    fn test_define_function() {
+        let env = Rc::new(RefCell::new(Env::new()));
+        let v = r###"
+        (define (f x y) (+ x y))
+        (f 1 2)
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "3".to_string());
+        let v = r###"
+        (define (f . x) (cdr x))
+        (f 1 2)
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "'(2)".to_string());
+    }
 }
