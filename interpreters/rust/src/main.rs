@@ -4,7 +4,7 @@ mod parser;
 mod value;
 mod env;
 mod eval;
-use value::Value;
+mod lex;
 use env::Env;
 use eval::{Interpreter, EvalError};
 use linefeed::{Interface, ReadResult};
@@ -26,6 +26,7 @@ fn main() {
 mod tests {
 
     use super::*;
+    use super::value::Value;
 
     #[test]
     fn test_eval() {

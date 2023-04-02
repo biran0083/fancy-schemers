@@ -1,7 +1,7 @@
 use std::{rc::Rc, cell::RefCell};
 
-use crate::{value::{Value, BuiltInFunType, apply_built_in_function}, parser::ParseResult, env::Env};
-
+use crate::{value::{Value, BuiltInFunType, apply_built_in_function}, env::Env};
+use crate::parser::parse;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct EvalError {
@@ -114,8 +114,8 @@ impl Interpreter for Value {
 
 impl Interpreter for str {
     fn eval(&self, env : Rc<RefCell<Env>>) -> Result<Rc<Value>, EvalError> {
-        let res = self.parse::<ParseResult>()?;
-        assert!(res.rest == "");
+        let res = parse(self)?;
+        assert_eq!(res.rest.len(), 0);
         let mut result = Rc::new(Value::Void);
         for exp in res.exps {
             result = exp.eval(env.clone())?;
