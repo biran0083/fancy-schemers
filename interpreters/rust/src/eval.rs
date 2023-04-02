@@ -13,20 +13,26 @@ pub trait Interpreter {
     fn eval(&self, env : Rc<RefCell<Env>>) -> Result<Rc<Value>, EvalError>;
 }
 
-impl Interpreter for Value {
-    fn eval(&self, env : Rc<RefCell<Env>>) -> Result<Rc<Value>, EvalError> {
-        match self {
-            Value::Symbol(s) if s == "null" => Ok(Rc::new(Value::Null)),
+fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, EvalError> {
+    let mut cur = cur.clone();
+    let mut env = env.clone();
+    loop {
+        match cur.as_ref() {
+            Value::Symbol(s) if s == "null" => {
+                return Ok(Rc::new(Value::Null));
+            },
             Value::Int(_)
             | Value::Bool(_)
-            | Value::Null => Ok(Rc::new(self.clone())),
+            | Value::Null => {
+                return Ok(cur.clone());
+            },
             Value::Symbol(s) => {
                 if let Some(v) = env.borrow().get(s.as_str()) {
-                    Ok(v)
+                    return Ok(v);
                 } else if let Ok(f) = s.parse::<BuiltInFunType>() {
-                    Ok(Rc::new(Value::BuiltInFun(f)))
+                    return Ok(Rc::new(Value::BuiltInFun(f)));
                 } else {
-                    Ok(Rc::new(Value::Void))
+                    return Ok(Rc::new(Value::Void));
                 }
             },
             Value::Pair(_, _) => {
@@ -36,22 +42,26 @@ impl Interpreter for Value {
                         Value::Pair(fst, rst) => {
                             let mut res = vec![fst.clone()];
                             res.extend(to_vec(rst.as_ref())?);
-                            Ok(res)
+                            return Ok(res)
                         }
-                        _ => Err(EvalError{msg:"failed to convert pair to list".into()})
+                        _ => {
+                            return Err(EvalError{msg:"failed to convert pair to list".into()});
+                        }
                     }
                 }
-                let lst = to_vec(self)?;
+                let lst = to_vec(cur.as_ref())?;
                 match lst[0].as_ref() {
                     Value::Symbol(s) if s == "define" => {
                         assert_eq!(lst.len(), 3);
                         match lst[1].as_ref() {
                             Value::Symbol(name) => {
-                                let value = lst[2].as_ref().eval(env.clone())?;
+                                let value = eval_helper(lst[2].clone(), env.clone())?;
                                 env.as_ref().borrow_mut().set(name.into(), value);
-                                Ok(Rc::new(Value::Void))
+                               return Ok(Rc::new(Value::Void));
                             },
-                            _ => Err(EvalError{msg:"evaluate define failed".into()})
+                            _ => {
+                                return Err(EvalError{msg:"evaluate define failed".into()});
+                            }
                         }
                     },
                     Value::Symbol(s) if s == "lambda" => {
@@ -68,24 +78,32 @@ impl Interpreter for Value {
                     },
                     Value::Symbol(s) if s == "if" => {
                         assert_eq!(lst.len(), 4);
-                        let cond = lst[1].as_ref().eval(env.clone())?;
+                        let cond = eval_helper(lst[1].clone(), env.clone())?;
                         match cond.as_ref() {
-                            Value::Bool(true) => lst[2].eval(env.clone()),
-                            Value::Bool(false) => lst[3].eval(env.clone()),
-                            _ => Err(EvalError{msg: "Condition is not boolean".into()}),
-                        }
+                            Value::Bool(true) => {
+                                cur = lst[2].clone();
+                                env = env.clone();
+                            }
+                            Value::Bool(false) => {
+                                cur = lst[3].clone();
+                                env = env.clone();
+                            }
+                            _ => {
+                                return Err(EvalError{msg: "Condition is not boolean".into()});
+                            },
+                        };
                     },
                     Value::Symbol(s) if s == "quote" => {
                         assert_eq!(lst.len(), 2);
-                        Ok(lst[1].clone())
+                        return Ok(lst[1].clone());
                     },
                     _ => {
-                        let f = lst[0].eval(env.clone())?;
+                        let f = eval_helper(lst[0].clone(), env.clone())?;
                         match f.as_ref() {
                             Value::BuiltInFun(f) => {
                                 let mut params = vec![];
                                 for i in 1..lst.len() {
-                                    params.push(lst[i].eval(env.clone())?);
+                                    params.push(eval_helper(lst[i].clone(), env.clone())?);
                                 }
                                 return apply_built_in_function(f.clone(), params);
                             },
@@ -95,10 +113,12 @@ impl Interpreter for Value {
                                 }
                                 let mut new_env = Env::new_with_parent(e.clone());
                                 for i in 1..lst.len() {
-                                    let v = lst[i].eval(env.clone())?;
+                                    let v = eval_helper(lst[i].clone(), env.clone())?;
                                     new_env.set(params[i - 1].clone(), v);
                                 }
-                                return body.as_ref().eval(Rc::new(RefCell::new(new_env)));
+                                cur = body.clone();
+                                env = Rc::new(RefCell::new(new_env));
+                                continue;
                             },
                             _ => {
                                 return Err(EvalError{msg: format!("unknown function type: {:?}", f)})
@@ -107,7 +127,9 @@ impl Interpreter for Value {
                     },
                 }
             },
-            _ => Err(EvalError{msg: "invalid ast".into()})
+            _ => {
+                return Err(EvalError{msg: "invalid ast".into()});
+            }
         }
     }
 }
@@ -118,7 +140,7 @@ impl Interpreter for str {
         assert_eq!(res.rest.len(), 0);
         let mut result = Rc::new(Value::Void);
         for exp in res.exps {
-            result = exp.eval(env.clone())?;
+            result = eval_helper(exp.clone(), env.clone())?;
         }
         return Ok(result);
     }

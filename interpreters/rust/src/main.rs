@@ -16,7 +16,10 @@ fn main() {
     if args.len() == 2 {
         match fs::read_to_string(&args[1]) {
             Ok(script) => {
-                script.eval(env.clone());
+                match script.eval(env.clone()) {
+                    Ok(_) => (),
+                    Err(e) => println!("execution failed: {:?}", e),
+                }
             },
             Err(e) => {
                 println!("{:?}", e);
@@ -176,5 +179,16 @@ mod tests {
             (perm '(1 2 3))
         "###.eval(env.clone()).unwrap().to_string();
         assert_eq!(v, "'((1 2 3) (1 3 2) (2 1 3) (2 3 1) (3 1 2) (3 2 1))".to_string());
+    }
+    
+    #[test]
+    fn test_tail_recursion() {
+        let env = Rc::new(RefCell::new(Env::new()));
+        let v = r###"
+        (define f (lambda (n res) (if (eq? n 0) res (f (- n 1) (+ 1 res)))))
+        (f 10000 0)
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "10000".to_string());
+
     }
 }
