@@ -205,6 +205,15 @@ mod tests {
         (f 1 2)
         "###.eval(env.clone()).unwrap().to_string();
         assert_eq!(v, "'(2)".to_string());
+    }
 
+    #[test]
+    fn test_dot() {
+        let env = Rc::new(RefCell::new(Env::new()));
+        let v = r###"
+        (define f (lambda (x . y) (car y)))
+        (f 1 2 3)
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "2".to_string());
     }
 }

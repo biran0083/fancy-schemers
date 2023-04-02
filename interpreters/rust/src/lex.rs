@@ -3,6 +3,7 @@ pub enum Token {
     LeftParen,
     RightParen,
     Quote,
+    Dot,
     Symbol(String),
 }
 
@@ -42,6 +43,10 @@ pub fn tokenize(s: &str) -> Vec<Token> {
                 t.push_token(&mut tokens);
                 tokens.push(Token::Quote);
             },
+            '.' => {
+                t.push_token(&mut tokens);
+                tokens.push(Token::Dot);
+            }
             c if c.is_whitespace() =>  t.push_token(&mut tokens),
             c => t.cur.push(c),
         }

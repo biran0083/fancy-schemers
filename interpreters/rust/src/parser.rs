@@ -24,42 +24,56 @@ impl From<ParseError> for EvalError {
 
 fn parse_one(tokens: &[Token]) -> Result<ParseResult, ParseError> {
     assert!(tokens.len() > 0);
-    fn to_pairs(lst : &[Rc<Value>]) -> Rc<Value> {
+    fn to_pairs(lst : &[Rc<Value>], end: &Rc<Value>) -> Rc<Value> {
         if lst.len() == 0 {
-            Rc::new(Value::Null)
+            end.clone()
         } else {
             Rc::new(Value::Pair(
                 lst[0].clone(),
-                to_pairs(&lst[1..])))
+                to_pairs(&lst[1..], end)))
         }
     }
     match &tokens[0] {
         Token::LeftParen => {
             let mut rem = &tokens[1..];
             let mut exps = vec![];
+            let mut end = Rc::new(Value::Null);
             while rem.len() > 0 && rem[0] != Token::RightParen {
-                let res = parse_one(rem)?;
-                exps.extend(res.exps);
-                rem = res.rest;
+                match &rem[0] {
+                    Token::Dot => {
+                        let res = parse_one(&rem[1..])?;
+                        end = res.exps[0].clone();
+                        rem = res.rest;
+                        assert_eq!(rem[0], Token::RightParen);
+                    },
+                    _ => {
+                        let res = parse_one(rem)?;
+                        exps.extend(res.exps);
+                        rem = res.rest;
+                    },
+                }
             }
             if rem.get(0) != Some(&Token::RightParen) {
                 Err(ParseError{msg: format!("expect ), got: {:?}", rem.get(0))})
             } else {
                 Ok(ParseResult{
-                    exps: vec![to_pairs(&exps)],
+                    exps: vec![to_pairs(&exps, &end)],
                     rest: &rem[1..],
                 })
             }
         },
         Token::RightParen => Err(ParseError{msg: "unexpected token )".into()}),
+        Token::Dot => Err(ParseError{msg: "unexpected token .".into()}),
         Token::Quote => {
             let mut res = parse_one(&tokens[1..])?;
             assert_eq!(res.exps.len(), 1);
             Ok(ParseResult{
                 exps: vec![
                     to_pairs(&vec![
-                        Rc::new(Value::Symbol("quote".into())),
-                        res.exps.pop().unwrap()])
+                                Rc::new(Value::Symbol("quote".into())),
+                                res.exps.pop().unwrap()
+                            ],
+                            &Rc::new(Value::Null))
                 ],
                 rest: res.rest,
             })
