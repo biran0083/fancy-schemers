@@ -12,7 +12,7 @@ pub enum Value {
     Closure {
         env: Rc<RefCell<Env>>,
         body: Rc<Value>,
-        params: Vec<String>
+        params: Rc<Value>,
     },
     Bool(bool),
     Pair(Rc<Value>, Rc<Value>),

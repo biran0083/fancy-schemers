@@ -191,4 +191,20 @@ mod tests {
         assert_eq!(v, "10000".to_string());
 
     }
+
+    #[test]
+    fn test_multi_arg_lambda() {
+        let env = Rc::new(RefCell::new(Env::new()));
+        let v = r###"
+        (define f (lambda x (car x)))
+        (f 1 2)
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "1".to_string());
+        let v = r###"
+        (define f (lambda x (cdr x)))
+        (f 1 2)
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "'(2)".to_string());
+
+    }
 }

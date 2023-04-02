@@ -13,6 +13,41 @@ pub trait Interpreter {
     fn eval(&self, env : Rc<RefCell<Env>>) -> Result<Rc<Value>, EvalError>;
 }
 
+fn bind(env : Rc<RefCell<Env>>, params: Rc<Value>, exps: &[Rc<Value>], mut new_env:  Env) -> Result<Rc<RefCell<Env>>, EvalError> {
+    let mut value = Rc::new(Value::Null);
+    for exp in exps.iter().rev() {
+        let v = eval_helper(exp.clone(), env.clone())?;
+        value = Rc::new(Value::Pair(v, value));
+    }
+    fn helper(params: Rc<Value>, values: Rc<Value>, env : &mut Env) -> Result<(), EvalError> {
+        match params.as_ref() {
+            Value::Null => {
+                match values.as_ref() {
+                    Value::Null => Ok(()),
+                    _ => Err(EvalError{msg: "binding failed".into()}),
+                } 
+            },
+            Value::Pair(fst, rst) => {
+                match values.as_ref() {
+                    Value::Pair(fst_value, rst_value) => {
+                        helper(fst.clone(), fst_value.clone(), env)?;
+                        helper(rst.clone(), rst_value.clone(), env)?;
+                        Ok(())
+                    }
+                    _ => Err(EvalError{msg: "binding failed".into()}),
+                } 
+            },
+            Value::Symbol(s) => {
+                env.set(s.into(), values.clone());
+                Ok(())
+            },
+            _ => Err(EvalError{msg: "binding failed".into()}),
+        }
+    }
+    helper(params.clone(), value.clone(), &mut new_env)?;
+    Ok(Rc::new(RefCell::new(new_env)))
+}
+
 fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, EvalError> {
     let mut cur = cur.clone();
     let mut env = env.clone();
@@ -66,15 +101,7 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                     },
                     Value::Symbol(s) if s == "lambda" => {
                         assert_eq!(lst.len(), 3);
-                        let mut params = vec![];
-                        for p in to_vec(lst[1].as_ref())? {
-                            if let Value::Symbol(name) = p.as_ref() {
-                                params.push(name.into());
-                            } else {
-                                return Err(EvalError{msg: "param is not symbol".into()})
-                            }
-                        }
-                        return Ok(Rc::new(Value::Closure{env: env.clone(), params: params, body: lst[2].clone()}));
+                        return Ok(Rc::new(Value::Closure{env: env.clone(), params: lst[1].clone(), body: lst[2].clone()}));
                     },
                     Value::Symbol(s) if s == "if" => {
                         assert_eq!(lst.len(), 4);
@@ -108,16 +135,8 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                                 return apply_built_in_function(f.clone(), params);
                             },
                             Value::Closure{env: e, body, params} => {
-                                if lst.len() != params.len() + 1 {
-                                    return Err(EvalError{msg: "param number mismatch".into()});
-                                }
-                                let mut new_env = Env::new_with_parent(e.clone());
-                                for i in 1..lst.len() {
-                                    let v = eval_helper(lst[i].clone(), env.clone())?;
-                                    new_env.set(params[i - 1].clone(), v);
-                                }
+                                env = bind(env.clone(), params.clone(), &lst[1..], Env::new_with_parent(e.clone()))?;
                                 cur = body.clone();
-                                env = Rc::new(RefCell::new(new_env));
                                 continue;
                             },
                             _ => {
