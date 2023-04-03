@@ -1,5 +1,5 @@
 use std::{rc::Rc, cell::RefCell};
-use crate::{value::{Value, BuiltInFunType, apply_built_in_function}, env::Env};
+use crate::{value::{Value, apply_built_in_function}, env::Env};
 use crate::parser::parse;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -64,8 +64,6 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
             Value::Symbol(s) => {
                 if let Some(v) = env.borrow().get(s.as_str()) {
                     return Ok(v);
-                } else if let Ok(f) = s.parse::<BuiltInFunType>() {
-                    return Ok(Rc::new(Value::BuiltInFun(f)));
                 } else {
                     return Ok(Rc::new(Value::Void));
                 }

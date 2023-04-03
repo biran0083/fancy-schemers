@@ -1,5 +1,5 @@
 
-use std::{rc::Rc, cell::RefCell, str::FromStr};
+use std::{rc::Rc, cell::RefCell};
 
 use crate::eval::EvalError;
 use crate::env::Env;
@@ -31,26 +31,6 @@ pub enum BuiltInFunType {
     Cdr,
     IsNull,
     Display
-}
-
-impl FromStr for BuiltInFunType {
-
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err>  {
-        match s {
-            "+" => Ok(BuiltInFunType::Add),
-            "-" => Ok(BuiltInFunType::Sub),
-            "*" => Ok(BuiltInFunType::Mul),
-            "eq?" => Ok(BuiltInFunType::Eq),
-            "cons" => Ok(BuiltInFunType::Cons),
-            "car" => Ok(BuiltInFunType::Car),
-            "cdr" => Ok(BuiltInFunType::Cdr),
-            "null?" => Ok(BuiltInFunType::IsNull),
-            "display" => Ok(BuiltInFunType::Display),
-            _ => Err(()),
-        }
-    }
 }
 
 pub fn apply_built_in_function(f : BuiltInFunType, params : Vec<Rc<Value>>) -> Result<Rc<Value>, EvalError> {

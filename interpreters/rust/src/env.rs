@@ -1,6 +1,6 @@
 use std::{collections::HashMap, rc::Rc, cell::RefCell};
 
-use crate::value::Value;
+use crate::value::{Value, BuiltInFunType};
 
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct Env {
@@ -26,7 +26,20 @@ impl Env {
     }
 
     pub fn new() -> Self {
-        Default::default()
+        Env { 
+            map: HashMap::from([
+                ("+".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Add))),
+                ("-".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Sub))),
+                ("*".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Mul))),
+                ("eq?".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Eq))),
+                ("cons".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Cons))),
+                ("car".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Car))),
+                ("cdr".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Cdr))),
+                ("null?".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::IsNull))),
+                ("display".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Display))),
+            ]),
+            parent: None
+        }
     }
 
     pub fn new_with_parent(parent: Rc<RefCell<Env>>) -> Self {
