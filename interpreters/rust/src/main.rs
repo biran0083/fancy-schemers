@@ -231,4 +231,14 @@ mod tests {
         "###.eval(env.clone()).unwrap().to_string();
         assert_eq!(v, "'(2)".to_string());
     }
+
+    #[test]
+    fn test_define_macro() {
+        let env = Rc::new(RefCell::new(Env::new()));
+        let v = r###"
+        (defmacro (and a b) (cons 'if (cons a (cons b (cons '#f null)))))
+        (and (eq? 1 1) (eq? 1 2))
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "#f".to_string());
+    }
 }
