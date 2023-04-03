@@ -64,13 +64,23 @@ fn parse_one(tokens: &[Token]) -> Result<ParseResult, ParseError> {
         },
         Token::RightParen => Err(ParseError{msg: "unexpected token )".into()}),
         Token::Dot => Err(ParseError{msg: "unexpected token .".into()}),
+        Token::QuasiQuote |
+        Token::UnQuote |
         Token::Quote => {
+            fn quote_name(token: &Token) -> String {
+                match token {
+                    Token::QuasiQuote => "quasiquote".into(),
+                    Token::UnQuote => "unquote".into(),
+                    Token::Quote => "quote".into(),
+                    _ => panic!("unreachable"),
+                }
+            }
             let mut res = parse_one(&tokens[1..])?;
             assert_eq!(res.exps.len(), 1);
             Ok(ParseResult{
                 exps: vec![
                     to_pairs(&vec![
-                                Rc::new(Value::Symbol("quote".into())),
+                                Rc::new(Value::Symbol(quote_name(&tokens[0]))),
                                 res.exps.pop().unwrap()
                             ],
                             &Rc::new(Value::Null))

@@ -136,6 +136,26 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                     Value::Symbol(s) if s == "quote" => {
                         assert_eq!(lst.len(), 2);
                         return Ok(lst[1].clone());
+                    },                    
+                    Value::Symbol(s) if s == "quasiquote" => {
+                        assert_eq!(lst.len(), 2);
+                        fn quasiquote_helper(exp : &Rc<Value>, env : &Rc<RefCell<Env>>) -> Result<Rc<Value>, EvalError> {
+                            match exp.as_ref() {
+                                Value:: Pair(fst, rst) => 
+                                    match (fst.as_ref(), rst.as_ref()) {
+                                        (Value::Symbol(s), Value::Pair(body, _)) 
+                                        if s == "unquote" => 
+                                            eval_helper(body.clone(), env.clone()),
+                                        _ => Ok(Rc::new(Value::Pair(quasiquote_helper(fst, env)?, 
+                                            quasiquote_helper(rst, env)?))),
+                                    },
+                                _ => Ok(exp.clone()),
+                            }
+                        }
+                        return Ok(quasiquote_helper(&lst[1], &env)?);
+                    },
+                    Value::Symbol(s) if s == "unquote" => {
+                        return Err(EvalError{msg: "unquote should only happen inside quasiquote".into()});
                     },
                     _ => {
                         let f = eval_helper(lst[0].clone(), env.clone())?;
@@ -160,7 +180,7 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                 }
             },
             _ => {
-                return Err(EvalError{msg: "invalid ast".into()});
+                return Err(EvalError{msg: format!("invalid ast: {}", cur.as_ref().to_string())});
             }
         }
     }

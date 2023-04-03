@@ -3,6 +3,8 @@ pub enum Token {
     LeftParen,
     RightParen,
     Quote,
+    QuasiQuote,
+    UnQuote,
     Dot,
     Symbol(String),
 }
@@ -42,6 +44,14 @@ pub fn tokenize(s: &str) -> Vec<Token> {
             '\'' => {
                 t.push_token(&mut tokens);
                 tokens.push(Token::Quote);
+            },
+            '`' => {
+                t.push_token(&mut tokens);
+                tokens.push(Token::QuasiQuote);
+            },
+            ',' => {
+                t.push_token(&mut tokens);
+                tokens.push(Token::UnQuote);
             },
             '.' => {
                 t.push_token(&mut tokens);

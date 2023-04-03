@@ -240,5 +240,11 @@ mod tests {
         (and (eq? 1 1) (eq? 1 2))
         "###.eval(env.clone()).unwrap().to_string();
         assert_eq!(v, "#f".to_string());
+
+        let v = r###"
+        (defmacro (and a b) `(if ,a ,b #f))
+        (and (eq? 1 1) (eq? 1 2))
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "#f".to_string());
     }
 }
