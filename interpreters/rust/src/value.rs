@@ -11,7 +11,7 @@ pub enum Value {
     BuiltInFun(BuiltInFunType),
     Closure {
         env: Rc<RefCell<Env>>,
-        body: Rc<Value>,
+        body: Vec<Rc<Value>>,
         params: Rc<Value>,
     },
     Bool(bool),

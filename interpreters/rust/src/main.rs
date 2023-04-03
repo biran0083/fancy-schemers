@@ -247,4 +247,20 @@ mod tests {
         "###.eval(env.clone()).unwrap().to_string();
         assert_eq!(v, "#f".to_string());
     }
+
+    #[test]
+    fn test_multi_exp_function() {
+        let env = Rc::new(RefCell::new(Env::new()));
+        let v = r###"
+        (define (f) 1 2)
+        (f)
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "2".to_string());
+
+        let v = r###"
+        (define f (lambda () 1 2))
+        (f)
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "2".to_string());
+    }
 }

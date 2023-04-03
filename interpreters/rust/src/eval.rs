@@ -85,7 +85,6 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                 let lst = to_vec(cur.as_ref())?;
                 match lst[0].as_ref() {
                     Value::Symbol(s) if s == "define" => {
-                        assert_eq!(lst.len(), 3);
                         match lst[1].as_ref() {
                             Value::Symbol(name) => {
                                 let value = eval_helper(lst[2].clone(), env.clone())?;
@@ -96,7 +95,10 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                                 match fst.as_ref() {
                                     Value::Symbol(name) => {
                                         let value = Rc::new(Value::Closure{
-                                            env: env.clone(), params: rst.clone(), body: lst[2].clone()});
+                                            env: env.clone(),
+                                            params: rst.clone(), 
+                                            body: lst[2..].iter().map(Rc::clone).collect()
+                                        });
                                         env.as_ref().borrow_mut().set(name.into(), value);
                                         return Ok(Rc::new(Value::Void));
                                     },
@@ -111,8 +113,11 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                         }
                     },
                     Value::Symbol(s) if s == "lambda" => {
-                        assert_eq!(lst.len(), 3);
-                        return Ok(Rc::new(Value::Closure{env: env.clone(), params: lst[1].clone(), body: lst[2].clone()}));
+                        return Ok(Rc::new(Value::Closure{
+                            env: env.clone(), 
+                            params: lst[1].clone(), 
+                            body: lst[2..].iter().map(Rc::clone).collect()
+                        }));
                     },
                     Value::Symbol(s) if s == "if" => {
                         assert_eq!(lst.len(), 4);
@@ -166,8 +171,12 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                                 return apply_built_in_function(f.clone(), params);
                             },
                             Value::Closure{env: e, body, params} => {
+                                assert!(body.len() > 0);
                                 env = bind(env.clone(), params.clone(), &lst[1..], Env::new_with_parent(e.clone()))?;
-                                cur = body.clone();
+                                for i in 0..body.len() - 1 {
+                                    eval_helper(body[i].clone(), env.clone())?;
+                                }
+                                cur = body.last().unwrap().clone();
                                 continue;
                             },
                             _ => {
