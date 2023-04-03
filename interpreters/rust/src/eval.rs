@@ -12,7 +12,7 @@ pub trait Interpreter {
     fn eval(&self, env : Rc<RefCell<Env>>) -> Result<Rc<Value>, EvalError>;
 }
 
-fn bind_helper(params: Rc<Value>, values: Rc<Value>, env : &mut Env) -> Result<(), EvalError> {
+fn bind_helper(params: Rc<Value>, values: Rc<Value>, env : &Rc<RefCell<Env>>) -> Result<(), EvalError> {
     match params.as_ref() {
         Value::Null => {
             match values.as_ref() {
@@ -31,21 +31,32 @@ fn bind_helper(params: Rc<Value>, values: Rc<Value>, env : &mut Env) -> Result<(
             } 
         },
         Value::Symbol(s) => {
-            env.set(s.into(), values.clone());
+            env.as_ref().borrow_mut().set(s.into(), values.clone());
             Ok(())
         },
         _ => Err(EvalError{msg: "binding failed".into()}),
     }
 }
 
-fn bind(env : Rc<RefCell<Env>>, params: Rc<Value>, exps: &[Rc<Value>], mut new_env:  Env) -> Result<Rc<RefCell<Env>>, EvalError> {
+fn bind_for_macro(params: Rc<Value>, exps: &[Rc<Value>], new_env: Rc<RefCell<Env>>) -> Result<Rc<RefCell<Env>>, EvalError> {
+    let mut value = Rc::new(Value::Null);
+    for exp in exps.iter().rev() {
+        value = Rc::new(Value::Pair(exp.clone(), value));
+    }
+    bind_helper(params.clone(), value.clone(), &new_env)?;
+    Ok(new_env)
+}
+
+// env: environment to evaluate exps in
+// new_envs: environment to store bindings
+fn bind_for_function(env : Rc<RefCell<Env>>, params: Rc<Value>, exps: &[Rc<Value>], new_env: Rc<RefCell<Env>>) -> Result<Rc<RefCell<Env>>, EvalError> {
     let mut value = Rc::new(Value::Null);
     for exp in exps.iter().rev() {
         let v = eval_helper(exp.clone(), env.clone())?;
         value = Rc::new(Value::Pair(v, value));
     }
-    bind_helper(params.clone(), value.clone(), &mut new_env)?;
-    Ok(Rc::new(RefCell::new(new_env)))
+    bind_helper(params.clone(), value.clone(), &new_env)?;
+    Ok(new_env)
 }
 
 fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, EvalError> {
@@ -84,7 +95,7 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                 }
                 let lst = to_vec(cur.as_ref())?;
                 match lst[0].as_ref() {
-                    Value::Symbol(s) if s == "define" => {
+                    Value::Symbol(s) if s == "define" || s == "defmacro"=> {
                         match lst[1].as_ref() {
                             Value::Symbol(name) => {
                                 let value = eval_helper(lst[2].clone(), env.clone())?;
@@ -97,7 +108,8 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                                         let value = Rc::new(Value::Closure{
                                             env: env.clone(),
                                             params: rst.clone(), 
-                                            body: lst[2..].iter().map(Rc::clone).collect()
+                                            body: lst[2..].iter().map(Rc::clone).collect(),
+                                            is_macro: s == "defmacro",
                                         });
                                         env.as_ref().borrow_mut().set(name.into(), value);
                                         return Ok(Rc::new(Value::Void));
@@ -116,7 +128,8 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                         return Ok(Rc::new(Value::Closure{
                             env: env.clone(), 
                             params: lst[1].clone(), 
-                            body: lst[2..].iter().map(Rc::clone).collect()
+                            body: lst[2..].iter().map(Rc::clone).collect(),
+                            is_macro: false,
                         }));
                     },
                     Value::Symbol(s) if s == "if" => {
@@ -170,13 +183,26 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
                                 }
                                 return apply_built_in_function(f.clone(), params);
                             },
-                            Value::Closure{env: e, body, params} => {
+                            Value::Closure{
+                                env: e, 
+                                body, 
+                                params, 
+                                is_macro,
+                            } => {
                                 assert!(body.len() > 0);
-                                env = bind(env.clone(), params.clone(), &lst[1..], Env::new_with_parent(e.clone()))?;
-                                for i in 0..body.len() - 1 {
-                                    eval_helper(body[i].clone(), env.clone())?;
+                                if *is_macro {
+                                    let new_env = bind_for_macro(params.clone(), &lst[1..], Env::new_with_parent(e.clone()))?;
+                                    for i in 0..body.len() - 1 {
+                                        eval_helper(body[i].clone(), new_env.clone())?;
+                                    }
+                                    cur = eval_helper(body.last().unwrap().clone(), new_env.clone())?;
+                                } else {
+                                    env = bind_for_function(env.clone(), params.clone(), &lst[1..], Env::new_with_parent(e.clone()))?;
+                                    for i in 0..body.len() - 1 {
+                                        eval_helper(body[i].clone(), env.clone())?;
+                                    }
+                                    cur = body.last().unwrap().clone();
                                 }
-                                cur = body.last().unwrap().clone();
                                 continue;
                             },
                             _ => {
@@ -193,66 +219,12 @@ fn eval_helper(cur: Rc<Value>, env : Rc<RefCell<Env>>)  -> Result<Rc<Value>, Eva
     }
 }
 
-struct Macro {
-    params: Rc<Value>,
-    body: Rc<Value>,
-}
-
-impl Macro {
-    fn expand(&self, exp: Rc<Value>) -> Result<Rc<Value>, EvalError> {
-        match (self.params.as_ref(), exp.as_ref()) {
-            (Value::Pair(n1, rst1), Value::Pair(n2, rst2)) =>
-            match (n1.as_ref(), n2.as_ref()) {
-                (Value::Symbol(s1), Value::Symbol(s2)) if s1 == s2 => {
-                    let mut env = Env::new();
-                    bind_helper(rst1.clone(), rst2.clone(), &mut env)?;
-                    return Ok(eval_helper(self.body.clone(), Rc::new(RefCell::new(env)))?);
-                },
-                _ => return Ok(exp),
-            },
-            _ => return Ok(exp),
-        }
-    }
-}
-
-fn extract_macros(exps : &[Rc<Value>]) -> Result<(Vec<Macro>, Vec<Rc<Value>>), EvalError> {
-    let mut macros = vec![];
-    let mut rem = vec![];
-    for exp in exps {
-        match exp.as_ref() {
-            Value::Pair(fst, snd) => {
-                match (fst.as_ref(), snd.as_ref()) {
-                    (Value::Symbol(s), Value::Pair(params, rst)) 
-                    if s == "defmacro" => {
-                        match rst.as_ref() {
-                            Value::Pair(body, _) => macros.push(Macro{params: params.clone(), body: body.clone()}),
-                            _ => return Err(EvalError{msg: "bad defmacro syntax".into()}),
-                        }
-                    },
-                    _ => rem.push(exp.clone()),
-                }
-            },
-            _ => rem.push(exp.clone()),
-        }
-    }
-    Ok((macros, rem))
-}
-
-fn expand_macros(exps : &[Rc<Value>]) -> Result<Vec<Rc<Value>>, EvalError> {
-    let (macros, mut exps) = extract_macros(exps)?;
-    for m in macros {
-        exps = exps.into_iter().map(|e| m.expand(e.clone()))
-            .collect::<Result<Vec<Rc<Value>>, EvalError>>()?;
-    }
-    Ok(exps)
-}
-
 impl Interpreter for str {
     fn eval(&self, env : Rc<RefCell<Env>>) -> Result<Rc<Value>, EvalError> {
         let res = parse(self)?;
         assert_eq!(res.rest.len(), 0);
         let mut result = Rc::new(Value::Void);
-        for exp in expand_macros(&res.exps)? {
+        for exp in &res.exps {
             result = eval_helper(exp.clone(), env.clone())?;
         }
         return Ok(result);

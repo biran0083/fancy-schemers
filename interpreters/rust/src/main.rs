@@ -1,5 +1,3 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 mod parser;
 mod value;
 mod env;
@@ -12,7 +10,7 @@ use std::fs;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let env = Rc::new(RefCell::new(Env::new()));
+    let env = Env::new();
     if args.len() == 2 {
         match fs::read_to_string(&args[1]) {
             Ok(script) => {
@@ -45,7 +43,7 @@ mod tests {
 
     #[test]
     fn test_eval() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = "123".eval(env.clone()).unwrap();
         assert_eq!(v.as_ref(), &Value::Int(123));
         let v = "(define a 123) a".eval(env.clone()).unwrap();
@@ -60,7 +58,7 @@ mod tests {
 
     #[test]
     fn test_lambda() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = "((lambda (a b) (+ a b)) 1 2)".eval(env.clone()).unwrap();
         assert_eq!(v.as_ref(), &Value::Int(3));
         let v = "(define sum (lambda (a b) (+ a b))) (sum (sum 1 2) 3)".eval(env.clone()).unwrap();
@@ -69,7 +67,7 @@ mod tests {
 
     #[test]
     fn test_if() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = "(if #t 1 2)".eval(env.clone()).unwrap();
         assert_eq!(v.as_ref(), &Value::Int(1));
         let v = "(if #f 1 2)".eval(env.clone()).unwrap();
@@ -82,7 +80,7 @@ mod tests {
 
     #[test]
     fn test_list() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = "null".eval(env.clone()).unwrap();
         assert_eq!(v.as_ref(), &Value::Null);
         let v = "(car (cons 1 2))".eval(env.clone()).unwrap();
@@ -95,7 +93,7 @@ mod tests {
 
     #[test]
     fn test_quote() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = "'()".eval(env.clone()).unwrap();
         assert_eq!(v.as_ref(), &Value::Null);
         let v = "'123".eval(env.clone()).unwrap();
@@ -114,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_list_op() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = "'()".eval(env.clone()).unwrap();
         assert_eq!(v.as_ref(), &Value::Null);
         let v = "'123".eval(env.clone()).unwrap();
@@ -133,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_value_to_stirng() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = "'()".eval(env.clone()).unwrap().to_string();
         assert_eq!(v, "'()".to_string());
         let v = "123".eval(env.clone()).unwrap().to_string();
@@ -149,27 +147,8 @@ mod tests {
 
     #[test]
     fn test_perm() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = r###"
-            (define map (lambda (f l)
-                (if (null? l)
-                    '()
-                    (cons (f (car l)) (map f (cdr l))))))
-            (define filter (lambda (f l)
-                (if (null? l)
-                    '()
-                    (if (f (car l))
-                        (cons (car l) (filter f (cdr l)))
-                        (filter f (cdr l))))))
-            (define append (lambda (a b)
-                (if (null? a)
-                    b
-                    (cons (car a) (append (cdr a) b)))))
-            (define flat (lambda (l)
-                (if (null? l)
-                    '()
-                    (append (car l) (flat (cdr l))))))
-            (define not (lambda (x) (if x #f #t)))
             (define perm (lambda (l)
                 (if (null? l)
                     '(())
@@ -183,7 +162,7 @@ mod tests {
     
     #[test]
     fn test_tail_recursion() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = r###"
         (define f (lambda (n res) (if (eq? n 0) res (f (- n 1) (+ 1 res)))))
         (f 10000 0)
@@ -194,7 +173,7 @@ mod tests {
 
     #[test]
     fn test_multi_arg_lambda() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = r###"
         (define f (lambda x (car x)))
         (f 1 2)
@@ -209,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_dot() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = r###"
         (define f (lambda (x . y) (car y)))
         (f 1 2 3)
@@ -219,7 +198,7 @@ mod tests {
 
     #[test]
     fn test_define_function() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = r###"
         (define (f x y) (+ x y))
         (f 1 2)
@@ -234,7 +213,7 @@ mod tests {
 
     #[test]
     fn test_define_macro() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = r###"
         (defmacro (and a b) (cons 'if (cons a (cons b (cons '#f null)))))
         (and (eq? 1 1) (eq? 1 2))
@@ -246,11 +225,20 @@ mod tests {
         (and (eq? 1 1) (eq? 1 2))
         "###.eval(env.clone()).unwrap().to_string();
         assert_eq!(v, "#f".to_string());
+    
+        let v = r###"
+        (defmacro (let bindings . body) 
+            `((lambda ,(map car bindings) . ,body) 
+                . ,(map (lambda (x) (cadr x)) bindings)))
+        (let ((x 1)
+              (y 2)) (+ x y))
+        "###.eval(env.clone()).unwrap().to_string();
+        assert_eq!(v, "3".to_string());
     }
 
     #[test]
     fn test_multi_exp_function() {
-        let env = Rc::new(RefCell::new(Env::new()));
+        let env = Env::new();
         let v = r###"
         (define (f) 1 2)
         (f)

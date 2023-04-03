@@ -1,6 +1,6 @@
 use std::{collections::HashMap, rc::Rc, cell::RefCell};
 
-use crate::value::{Value, BuiltInFunType};
+use crate::{value::{Value, BuiltInFunType}, eval::Interpreter};
 
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct Env {
@@ -25,8 +25,8 @@ impl Env {
         self.map.insert(key, value);
     }
 
-    pub fn new() -> Self {
-        Env { 
+    pub fn new() -> Rc<RefCell<Self>> {
+        let res = Rc::new(RefCell::new(Env { 
             map: HashMap::from([
                 ("+".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Add))),
                 ("-".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Sub))),
@@ -39,10 +39,37 @@ impl Env {
                 ("display".to_string(), Rc::new(Value::BuiltInFun(BuiltInFunType::Display))),
             ]),
             parent: None
+        }));
+        static PRELUDE : &str = r###"
+            (define (map f l)
+                (if (null? l)
+                    '()
+                    (cons (f (car l)) (map f (cdr l)))))
+            (define (filter f l)
+                (if (null? l)
+                    '()
+                    (if (f (car l))
+                        (cons (car l) (filter f (cdr l)))
+                        (filter f (cdr l)))))
+            (define (append a b)
+                (if (null? a)
+                    b
+                    (cons (car a) (append (cdr a) b))))
+            (define (not x) (if x #f #t))
+            (define (flat l)
+                (if (null? l)
+                    '()
+                    (append (car l) (flat (cdr l)))))
+            (define (cadr x) (car (cdr x)))
+        "###;
+        if let Err(e) = PRELUDE.eval(res.clone()) {
+            println!("{:?}", e);
+            panic!("failed to evaluate prelude");
         }
+        res
     }
 
-    pub fn new_with_parent(parent: Rc<RefCell<Env>>) -> Self {
-        Env{map: HashMap::new(), parent: Some(parent)}
+    pub fn new_with_parent(parent: Rc<RefCell<Env>>) -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Env{map: HashMap::new(), parent: Some(parent)}))
     }
 }

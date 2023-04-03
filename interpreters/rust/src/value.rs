@@ -13,6 +13,7 @@ pub enum Value {
         env: Rc<RefCell<Env>>,
         body: Vec<Rc<Value>>,
         params: Rc<Value>,
+        is_macro: bool,
     },
     Bool(bool),
     Pair(Rc<Value>, Rc<Value>),
@@ -129,7 +130,7 @@ fn to_string_helper(value : &Value) -> String {
         Value::Void => "".into(),
         Value::Int(v) => v.to_string(),
         Value::BuiltInFun(f) => format!("{:?}",f),
-        Value::Closure{env:_, body:_, params:_} => "#procedure".into(),
+        Value::Closure{env:_, body:_, params:_, is_macro: _} => "#procedure".into(),
         Value::Bool(v) => if *v {
             "#t".into()
         } else {
